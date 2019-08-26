@@ -2,6 +2,7 @@ const NodeCache = require('node-cache');
 const Bitbucket = require('./models/Bitbucket');
 const getRedisClient = require('./redis');
 const { CACHE_REDIS, CACHE_IN_MEMORY } = require('./constants');
+const minimatch = require('minimatch');
 
 const ALLOWED_CACHE_ENGINES = [CACHE_IN_MEMORY, CACHE_REDIS];
 
@@ -78,6 +79,80 @@ function Auth(config, stuff) {
   this.defaultMailDomain = config.defaultMailDomain;
   this.ttl = (config.ttl || DEFAULT_CACHE_TTL) * 1000;
   this.logger = stuff.logger;
+}
+
+Auth.prototype.allow_access = async function allow_access(user, pkg, callback) {
+  
+  let allowAccess = parseAllow(pkg.access.join(','));
+  
+  let cachedUser;
+
+  try {
+    let cached = await this.cache.get(user.name);
+    if (cached) {
+      cachedUser = JSON.parse(cached);
+    }
+  } catch (err) {
+    this.logger.warn('Cant get from cache, must authenticate', err);
+    return callback(err);
+  }
+
+  let canAccess = Object.keys(cachedUser.privileges.teams).some(team => {
+
+    if (allowAccess[team] == null) {
+      return false;
+    }
+
+    if (!allowAccess[team].length) {
+      return true;
+    }
+
+    return allowAccess[team].includes(cachedUser.privileges.teams[team]);
+  });
+
+  if (canAccess) {
+    return callback(null, true);
+  } else {
+    return callback(null, false);
+  }
+}
+
+Auth.prototype.allow_publish = async function allow_publish(user, pkg, callback) {
+  console.log(JSON.stringify(pkg));
+
+  let allowPublish = parseAllow(pkg.publish.join(','));
+  
+  let cachedUser;
+
+  try {
+    let cached = await this.cache.get(user.name);
+    if (cached) {
+      cachedUser = JSON.parse(cached);
+      console.log(JSON.stringify(cachedUser));
+    }
+  } catch (err) {
+    this.logger.warn('Cant get from cache, must authenticate', err);
+    return callback(err);
+  }
+
+  let canPublish = Object.keys(cachedUser.privileges.teams).some(team => {
+
+    if (allowPublish[team] == null) {
+      return false;
+    }
+
+    if (!allowPublish[team].length) {
+      return true;
+    }
+
+    return allowPublish[team].includes(cachedUser.privileges.teams[team]);
+  });
+
+  if (canPublish) {
+    return callback(null, true);
+  } else {
+    return callback(null, false);
+  }
 }
 
 /**
@@ -165,7 +240,7 @@ Auth.prototype.authenticate = async function authenticate(username, password, do
     if (this.cache) {
       const hashedPassword = this.bcrypt.hashSync(password, 10);
       try {
-        await this.cache.set(username, JSON.stringify({ teams, password: hashedPassword }), 'EX', this.ttl);
+        await this.cache.set(username, JSON.stringify({ teams, privileges, password: hashedPassword }), 'EX', this.ttl);
       } catch (err) {
         this.logger.warn('Cant save to cache', err);
       }
