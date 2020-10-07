@@ -20,10 +20,8 @@ Bitbucket.prototype.getUser = function getUser() {
   }).then(response => response.data);
 };
 
-Bitbucket.prototype.getTeams = function getTeams(role) {
+Bitbucket.prototype.getTeams = function getTeams() {
   const { username, password, apiUrl } = this;
-  const teams = [];
-  this.logger.debug(`[bitbucket] getting teams for ${username}, url: ${`${apiUrl}/teams?role=${role}&pagelen=100`}, role: ${role}`);
 
   function callApi(url) {
     return axios({
@@ -31,26 +29,20 @@ Bitbucket.prototype.getTeams = function getTeams(role) {
       url,
       auth: { username, password },
     }).then((response) => {
-      teams.push(...response.data.values.map(x => x.username));
-      if (response.data.next) return callApi(response.data.next);
-      return { role, teams };
+      return response.data.values.map(team => ({ name: team.workspace.slug, permission: team.permission }));
     });
   }
 
-  return callApi(`${apiUrl}/teams?role=${role}&pagelen=100`);
+  return callApi(`${apiUrl}/user/permissions/workspaces`);
 };
 
 
 Bitbucket.prototype.getPrivileges = function getPrivileges() {
-  return Promise.all([
-    this.getTeams('member'),
-    this.getTeams('contributor'),
-    this.getTeams('admin'),
-  ]).then((values) => {
+  return this.getTeams().then(teams => {
     const result = {};
-    values.forEach(({ role, teams }) => {
-      Object.assign(result, ...teams.map(t => ({ [t]: role })));
-    });
+    teams.forEach(team => {
+      Object.assign(result, { [team.name]: team.permission });
+    })
     return { teams: result };
   });
 };
