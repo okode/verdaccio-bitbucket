@@ -82,9 +82,9 @@ function Auth(config, stuff) {
 }
 
 Auth.prototype.allow_access = async function allow_access(user, pkg, callback) {
-  
+
   let allowAccess = parseAllow(pkg.access.join(','));
-  
+
   let cachedUser;
 
   try {
@@ -121,7 +121,7 @@ Auth.prototype.allow_publish = async function allow_publish(user, pkg, callback)
   console.log(JSON.stringify(pkg));
 
   let allowPublish = parseAllow(pkg.publish.join(','));
-  
+
   let cachedUser;
 
   try {
@@ -240,7 +240,11 @@ Auth.prototype.authenticate = async function authenticate(username, password, do
     if (this.cache) {
       const hashedPassword = this.bcrypt.hashSync(password, 10);
       try {
-        await this.cache.set(username, JSON.stringify({ teams, privileges, password: hashedPassword }), 'EX', this.ttl);
+        if (this.cacheEngine === CACHE_IN_MEMORY) {
+          await this.cache.set(username, JSON.stringify({ teams, privileges, password: hashedPassword }), this.ttl, () => { });
+        } else if (this.cacheEngine === CACHE_REDIS) {
+          await this.cache.set(username, JSON.stringify({ teams, privileges, password: hashedPassword }), 'EX', this.ttl);
+        }
       } catch (err) {
         this.logger.warn('Cant save to cache', err);
       }
