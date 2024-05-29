@@ -4,8 +4,6 @@
 
 set -e
 
-npm run build
-
 echo -n "Username: "
 read -r USERNAME
 
@@ -18,7 +16,7 @@ define SOURCE <<'EOF'
     const dir = process.argv[1];
     const username = process.argv[2];
     const password = process.argv[3];
-    const Bitbucket = require(`${dir}/../lib/models/Bitbucket`);
+    const Bitbucket = require(`${dir}/../src/models/Bitbucket`);
     new Bitbucket(username, password, console).getPrivileges().then((result) => {
         console.log('%j', result);
     }).catch((err) => {
